@@ -27,6 +27,16 @@ git clone https://github.com/benthomasson/beliefs && cd beliefs
 
 ## Usage
 
+### Initialize a registry
+
+```bash
+# Create beliefs.md and nogoods.md in the current directory
+beliefs init
+
+# With repos for cross-reference resolution
+beliefs init --repos myproject shared-lib:~/code/shared-lib
+```
+
 ### Track claims
 
 ```bash
