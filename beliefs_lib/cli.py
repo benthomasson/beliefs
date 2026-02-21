@@ -54,21 +54,25 @@ def cmd_check_stale(args):
     repos, claims = parse_registry(args.registry)
     results = check_stale(claims, repos)
 
+    already_stale = [c for c in claims if c.status == "STALE"]
     in_claims = [c for c in claims if c.status == "IN"]
-    stale_ids = set()
+    newly_stale_ids = set()
     for claim_id, status, msg, entry_path in results:
-        stale_ids.add(claim_id)
+        newly_stale_ids.add(claim_id)
         if not args.quiet:
             print(f"STALE {claim_id}")
             print(f"      {msg}")
             print(f"      Entry: {entry_path}")
             print()
 
-    ok_count = len(in_claims) - len(stale_ids)
+    ok_count = len(in_claims) - len(newly_stale_ids)
     if not args.quiet:
-        print(f"Summary: {ok_count} OK, {len(stale_ids)} STALE")
+        parts = [f"{ok_count} OK", f"{len(newly_stale_ids)} newly STALE"]
+        if already_stale:
+            parts.append(f"{len(already_stale)} already STALE")
+        print(f"Summary: {', '.join(parts)}")
 
-    sys.exit(1 if stale_ids else 0)
+    sys.exit(1 if newly_stale_ids else 0)
 
 
 def cmd_add(args):
@@ -80,21 +84,23 @@ def cmd_add(args):
             print(f"Error: claim '{args.id}' already exists", file=sys.stderr)
             sys.exit(1)
 
+    status = args.status or "IN"
     claim = Claim(
         id=args.id,
         text=args.text,
         source=args.source or "",
         date=args.date or date.today().isoformat(),
-        status="IN",
+        status=status,
         type=args.type or "",
         assumes=args.assumes or [],
         depends_on=args.depends_on or [],
+        stale_reason=args.stale_reason or "",
     )
 
     append_claim(args.registry, claim)
 
     if not args.quiet:
-        print(f"Added claim '{claim.id}' (status: IN)")
+        print(f"Added claim '{claim.id}' (status: {status})")
         if claim.source:
             print(f"  Source:      {claim.source}")
         print(f"  Date:        {claim.date}")
@@ -104,6 +110,8 @@ def cmd_add(args):
             print(f"  Depends on:  {', '.join(claim.depends_on)}")
         if claim.type:
             print(f"  Type:        {claim.type}")
+        if claim.stale_reason:
+            print(f"  Stale reason: {claim.stale_reason}")
 
 
 def cmd_resolve(args):
@@ -160,7 +168,86 @@ def cmd_nogoods(args):
 def cmd_compact(args):
     repos, claims = parse_registry(args.registry)
     nogoods = parse_nogoods(args.nogoods_file)
-    print(compact(claims, nogoods, budget=args.budget))
+    truncate = not args.no_truncate
+    print(compact(claims, nogoods, budget=args.budget, truncate=truncate))
+
+
+def cmd_list(args):
+    repos, claims = parse_registry(args.registry)
+    if args.status:
+        claims = [c for c in claims if c.status == args.status]
+    for c in claims:
+        type_str = f" {c.type}" if c.type else ""
+        print(f"[{c.status}]{type_str:10s}  {c.id}")
+
+
+def cmd_show(args):
+    repos, claims = parse_registry(args.registry)
+    claim = None
+    for c in claims:
+        if c.id == args.claim_id:
+            claim = c
+            break
+    if claim is None:
+        print(f"Error: claim '{args.claim_id}' not found", file=sys.stderr)
+        sys.exit(1)
+    type_str = f" {claim.type}" if claim.type else ""
+    print(f"### {claim.id} [{claim.status}]{type_str}")
+    print(f"  {claim.text}")
+    if claim.source:
+        print(f"  Source:        {claim.source}")
+    if claim.date:
+        print(f"  Date:          {claim.date}")
+    if claim.assumes:
+        print(f"  Assumes:       {', '.join(claim.assumes)}")
+    if claim.depends_on:
+        print(f"  Depends on:    {', '.join(claim.depends_on)}")
+    if claim.retracted_by:
+        print(f"  Retracted by:  {claim.retracted_by}")
+    if claim.stale_reason:
+        print(f"  Stale reason:  {claim.stale_reason}")
+    if claim.superseded_by:
+        print(f"  Superseded by: {claim.superseded_by}")
+    if claim.nogood:
+        print(f"  Nogood:        {claim.nogood}")
+    if claim.ref_check:
+        print(f"  Ref check:     {claim.ref_check}")
+
+
+def cmd_update(args):
+    repos, claims = parse_registry(args.registry)
+    claim = None
+    for c in claims:
+        if c.id == args.claim_id:
+            claim = c
+            break
+    if claim is None:
+        print(f"Error: claim '{args.claim_id}' not found", file=sys.stderr)
+        sys.exit(1)
+
+    extra = {}
+    if args.status:
+        pass  # handled by update_claim_status directly
+    if args.stale_reason:
+        extra["stale_reason"] = args.stale_reason
+    if args.superseded_by:
+        extra["superseded_by"] = args.superseded_by
+    if args.add_assumes:
+        new_assumes = list(set(claim.assumes + args.add_assumes))
+        extra["assumes"] = ", ".join(new_assumes)
+    if args.add_depends_on:
+        new_deps = list(set(claim.depends_on + args.add_depends_on))
+        extra["depends_on"] = ", ".join(new_deps)
+
+    new_status = args.status or claim.status
+    update_claim_status(args.registry, args.claim_id, new_status, **extra)
+
+    if not args.quiet:
+        print(f"Updated claim '{args.claim_id}'")
+        if args.status:
+            print(f"  Status:  {claim.status} -> {new_status}")
+        for k, v in extra.items():
+            print(f"  {k.replace('_', ' ').title()}: {v}")
 
 
 def main():
@@ -194,8 +281,13 @@ def main():
     add_p.add_argument("--date", help="Claim date YYYY-MM-DD (default: today)")
     add_p.add_argument("--assumes", nargs="*", help="Assumption labels")
     add_p.add_argument("--depends-on", nargs="*", help="Claim IDs this depends on")
-    add_p.add_argument("--type", choices=["DERIVED", "PREDICTED", "MATCHED", "INHERITED", "AXIOM"],
-                        help="Derivation type")
+    add_p.add_argument("--type", choices=[
+                        "DERIVED", "PREDICTED", "MATCHED", "INHERITED", "AXIOM",
+                        "WARNING", "OBSERVATION", "NOTE"],
+                        help="Claim type (derivation or process-level)")
+    add_p.add_argument("--status", choices=["IN", "OUT", "STALE"],
+                        help="Initial status (default: IN)")
+    add_p.add_argument("--stale-reason", help="Reason for STALE status (use with --status STALE)")
 
     # resolve
     resolve_p = sub.add_parser("resolve", help="Resolve conflict between two claims")
@@ -209,6 +301,24 @@ def main():
     # compact
     compact_p = sub.add_parser("compact", help="Produce a context summary")
     compact_p.add_argument("--budget", type=int, default=500, help="Token budget (default: 500)")
+    compact_p.add_argument("--no-truncate", action="store_true", help="Don't truncate claim text")
+
+    # list
+    list_p = sub.add_parser("list", help="List all claims (ID and status)")
+    list_p.add_argument("--status", choices=["IN", "OUT", "STALE"], help="Filter by status")
+
+    # show
+    show_p = sub.add_parser("show", help="Show full detail for one claim")
+    show_p.add_argument("claim_id", help="Claim ID to show")
+
+    # update
+    update_p = sub.add_parser("update", help="Update an existing claim")
+    update_p.add_argument("claim_id", help="Claim ID to update")
+    update_p.add_argument("--status", choices=["IN", "OUT", "STALE"], help="New status")
+    update_p.add_argument("--stale-reason", help="Set stale reason")
+    update_p.add_argument("--superseded-by", help="Set superseded-by claim ID")
+    update_p.add_argument("--add-assumes", nargs="*", help="Add assumption labels")
+    update_p.add_argument("--add-depends-on", nargs="*", help="Add dependency claim IDs")
 
     args = parser.parse_args()
 
@@ -219,5 +329,8 @@ def main():
         "resolve": cmd_resolve,
         "nogoods": cmd_nogoods,
         "compact": cmd_compact,
+        "list": cmd_list,
+        "show": cmd_show,
+        "update": cmd_update,
     }
     commands[args.command](args)

@@ -75,12 +75,26 @@ def check_refs(claims: list[Claim], repos: dict[str, str]) -> list[tuple[str, st
         else:
             results.append((claim.id, "OK", "No keywords to check"))
 
-        # Check depends_on references
+        # Check depends_on references (must exist as claims)
         for dep_id in claim.depends_on:
             dep = find_claim(claims, dep_id)
             if dep is None:
                 results.append((claim.id, "FAIL", f"Depends on non-existent claim: {dep_id}"))
             elif dep.status == "OUT":
                 results.append((claim.id, "WARN", f"Depends on retracted claim: {dep_id}"))
+
+    # Second pass: check assumes that look like claim IDs but don't exist
+    claim_ids = {c.id for c in claims}
+    for claim in claims:
+        for label in claim.assumes:
+            # Warn if the label matches an existing claim ID pattern (has hyphens)
+            # and is close to but doesn't match any actual claim
+            if "-" in label and label not in claim_ids:
+                # Check if any claim ID shares a prefix
+                for cid in claim_ids:
+                    if label.startswith(cid.rsplit("-", 1)[0]) or cid.startswith(label.rsplit("-", 1)[0]):
+                        results.append((claim.id, "WARN",
+                            f"Assumes '{label}' looks like claim ID but doesn't exist (similar: {cid})"))
+                        break
 
     return results

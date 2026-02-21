@@ -24,6 +24,9 @@ DERIVATION_TYPE_PRIORITY = {
     "MATCHED": 50,
     "INHERITED": 40,
     "AXIOM": 90,
+    "WARNING": 85,      # High priority — guardrails should be hard to retract
+    "OBSERVATION": 45,   # Process-level fact
+    "NOTE": 30,          # Informational, low entrenchment
 }
 
 
@@ -42,11 +45,11 @@ def classify_source(source_path: str) -> str:
 
 
 def months_since(date_str: str) -> int:
-    """Months between claim date and today (Feb 2026)."""
+    """Months between claim date and today."""
     d = parse_date(date_str)
     if d is None:
         return 12  # Unknown date gets no recency bonus
-    today = date(2026, 2, 21)
+    today = date.today()
     return (today.year - d.year) * 12 + (today.month - d.month)
 
 

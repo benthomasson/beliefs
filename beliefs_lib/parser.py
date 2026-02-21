@@ -138,37 +138,33 @@ def update_claim_status(path: Path, claim_id: str, new_status: str, **extra) -> 
     text = path.read_text()
     lines = text.splitlines()
     result = []
-    found = False
+    i = 0
 
-    for i, line in enumerate(lines):
-        m = HEADER_RE.match(line)
+    while i < len(lines):
+        m = HEADER_RE.match(lines[i])
         if m and m.group(1) == claim_id:
-            found = True
+            # Rewrite header with new status
             old_type = m.group(3) or ""
             new_header = f"### {claim_id} [{new_status}]"
             if old_type:
                 new_header += f" {old_type}"
             result.append(new_header)
+            i += 1
 
-            # Find end of this claim's metadata and append extras
-            j = i + 1
-            while j < len(lines):
-                if HEADER_RE.match(lines[j]):
-                    break
-                result.append(lines[j])
-                j += 1
-            # Insert extra fields before the blank line or next header
+            # Copy existing claim body until next header
+            while i < len(lines) and not HEADER_RE.match(lines[i]):
+                result.append(lines[i])
+                i += 1
+
+            # Append extra metadata
             for key, val in extra.items():
                 display_key = key.replace("_", " ").title()
                 result.append(f"- {display_key}: {val}")
-            # Skip already-processed lines
-            for _ in range(i + 1, j):
-                lines[_] = None  # mark consumed
-        elif line is not None:
-            result.append(line)
+        else:
+            result.append(lines[i])
+            i += 1
 
-    if found:
-        path.write_text("\n".join(result) + "\n")
+    path.write_text("\n".join(result) + "\n")
 
 
 def parse_nogoods(path: Path) -> list[Nogood]:

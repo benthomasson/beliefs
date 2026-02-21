@@ -11,7 +11,7 @@ def estimate_tokens(text: str) -> int:
     return len(text.split())
 
 
-def compact(claims: list[Claim], nogoods: list[Nogood], budget: int = 500) -> str:
+def compact(claims: list[Claim], nogoods: list[Nogood], budget: int = 500, truncate: bool = True) -> str:
     """Produce a compact belief state summary within token budget.
 
     Priority: nogoods (never dropped), STALE claims, IN claims by entrenchment.
@@ -42,7 +42,7 @@ def compact(claims: list[Claim], nogoods: list[Nogood], budget: int = 500) -> st
     if stale_claims:
         lines.append("## Stale (needs review)")
         for c in stale_claims:
-            line = f"- {c.id}: {c.text[:80]}"
+            line = f"- {c.id}: {c.text if not truncate else c.text[:80]}"
             if c.superseded_by:
                 line += f" -> superseded by {c.superseded_by}"
             lines.append(line)
@@ -52,7 +52,7 @@ def compact(claims: list[Claim], nogoods: list[Nogood], budget: int = 500) -> st
     if in_claims:
         lines.append("## Active Claims (IN)")
         for i, c in enumerate(in_claims):
-            line = f"- {c.id}: {c.text[:80]}"
+            line = f"- {c.id}: {c.text if not truncate else c.text[:80]}"
             if c.type:
                 line += f" ({c.type})"
             if c.depends_on:
