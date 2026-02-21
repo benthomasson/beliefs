@@ -102,3 +102,25 @@ beliefs compact --budget 500
 ## Origin
 
 Built as a proof-of-concept during a meta-research study on using AI for open-ended research. The study found that multi-agent LLM systems suffer from belief staleness, circular verification, and cross-repository knowledge gaps — the same problems classical AI addressed with truth maintenance systems in the 1980s. This tool bridges those two worlds.
+
+## References
+
+The design draws on classical AI belief maintenance and belief revision literature:
+
+- **Doyle, J. (1979).** "A Truth Maintenance System." *Artificial Intelligence*, 12(3), 231–272. [doi:10.1016/0004-3702(79)90008-0](https://doi.org/10.1016/0004-3702(79)90008-0)
+  The original justification-based TMS. Introduced dependency-directed backtracking and the idea that beliefs should be retracted when their justifications fail. The `compact` command's prioritized summarization is inspired by TMS dependency tracking.
+
+- **de Kleer, J. (1986).** "An Assumption-based TMS." *Artificial Intelligence*, 28(2), 127–162. [doi:10.1016/0004-3702(86)90080-9](https://doi.org/10.1016/0004-3702(86)90080-9)
+  The assumption-based TMS (ATMS). Tracks multiple simultaneous worldviews via assumption sets. The `nogoods` database and `assumes` metadata on claims come directly from the ATMS design — a nogood is a set of assumptions known to be jointly inconsistent.
+
+- **Alchourrón, C., Gärdenfors, P., & Makinson, D. (1985).** "On the Logic of Theory Change: Partial Meet Contraction and Revision Functions." *Journal of Symbolic Logic*, 50(2), 510–530. [doi:10.2307/2274239](https://doi.org/10.2307/2274239)
+  The AGM framework for belief revision. Defines contraction (removing a belief with minimal disruption), revision (adding a belief while maintaining consistency), and expansion. The `resolve` command's entrenchment ordering implements AGM's epistemic entrenchment — more entrenched beliefs are harder to retract.
+
+- **Gärdenfors, P. (1988).** *Knowledge in Flux: Modeling the Dynamics of Epistemic States.* MIT Press. [ISBN 978-0-262-07113-2](https://mitpress.mit.edu/9780262571579/knowledge-in-flux/)
+  Book-length treatment of AGM theory with epistemic entrenchment ordering. The entrenchment scoring system (`resolve`) — source priority + recency bonus + derivation type — is a practical approximation of Gärdenfors's formal ordering.
+
+- **Forbus, K. & de Kleer, J. (1993).** *Building Problem Solvers.* MIT Press. [ISBN 978-0-262-06157-7](https://mitpress.mit.edu/9780262561105/building-problem-solvers/)
+  Comprehensive treatment of TMS/ATMS implementation with cross-system dependency tracking. The multi-repository cross-reference checking (`check-refs`, `depends-on`) follows the pattern of inter-system dependency management described here.
+
+- **McCarthy, J. & Hayes, P. (1969).** "Some Philosophical Problems from the Standpoint of Artificial Intelligence." *Machine Intelligence*, 4, 463–502. [PDF](http://www-formal.stanford.edu/jmc/mcchay69.pdf)
+  Introduced the frame problem: how to efficiently represent what *doesn't* change when an action occurs. The `check-stale` command addresses the LLM version of the frame problem — when a source file changes, which claims are still valid and which need updating?
