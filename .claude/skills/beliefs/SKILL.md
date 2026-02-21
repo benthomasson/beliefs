@@ -1,7 +1,7 @@
 ---
 name: beliefs
 description: Manage the belief registry — track claims, detect staleness, resolve conflicts, query contradictions
-argument-hint: "[check-refs|check-stale|add|resolve|nogoods|compact|list|show|update|hash-sources|status] [args...]"
+argument-hint: "[init|check-refs|check-stale|add|resolve|nogoods|compact|list|show|update|hash-sources|status] [args...]"
 allowed-tools: Bash(beliefs *), Bash(./beliefs *), Bash(uvx *beliefs*), Read, Grep, Glob
 ---
 
@@ -15,6 +15,12 @@ Try these in order until one works:
 3. `uvx --from git+https://github.com/benthomasson/beliefs beliefs $ARGUMENTS` (fallback)
 
 ## Subcommand Behavior
+
+### `init`
+Run `beliefs init` to create `beliefs.md` and `nogoods.md` in the current directory. Use `--repos` to register repositories for cross-reference resolution. Bare names default to `~/git/<name>`; use `name:path` for explicit paths.
+
+Example: `/beliefs init with repos myproject and shared-lib at ~/code/shared-lib`
+becomes: `beliefs init --repos myproject shared-lib:~/code/shared-lib`
 
 ### No arguments or `status`
 Run all three checks and summarize:
