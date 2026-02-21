@@ -261,6 +261,47 @@ def cmd_update(args):
             print(f"  {k.replace('_', ' ').title()}: {v}")
 
 
+def cmd_add_repo(args):
+    repos, claims = parse_registry(args.registry)
+
+    # Parse name:path or bare name
+    spec = args.repo
+    if ":" in spec:
+        name, path = spec.split(":", 1)
+    else:
+        name = spec
+        path = f"~/git/{spec}"
+
+    if name in repos:
+        print(f"Error: repo '{name}' already exists ({repos[name]})", file=sys.stderr)
+        sys.exit(1)
+
+    # Insert into Repos section in-place (after last repo entry, before blank lines)
+    text = args.registry.read_text()
+    lines = text.splitlines()
+    insert_at = None
+    last_repo_line = None
+    for i, line in enumerate(lines):
+        if line.strip() == "## Repos":
+            insert_at = i + 1
+        elif insert_at is not None and line.startswith("## "):
+            break
+        elif insert_at is not None and line.startswith("- "):
+            last_repo_line = i + 1
+    if last_repo_line is not None:
+        insert_at = last_repo_line
+
+    if insert_at is None:
+        print("Error: no ## Repos section found in registry", file=sys.stderr)
+        sys.exit(1)
+
+    lines.insert(insert_at, f"- {name}: {path}")
+    args.registry.write_text("\n".join(lines) + "\n")
+
+    if not args.quiet:
+        print(f"Added repo '{name}' -> {path}")
+
+
 def cmd_init(args):
     if args.registry.exists():
         print(f"Error: {args.registry} already exists", file=sys.stderr)
@@ -365,6 +406,10 @@ def main():
     init_p = sub.add_parser("init", help="Create beliefs.md and nogoods.md in current directory")
     init_p.add_argument("--repos", nargs="*", help="Repo names (name:path or bare name for ~/git/name)")
 
+    # add-repo
+    add_repo_p = sub.add_parser("add-repo", help="Add a repo to the registry")
+    add_repo_p.add_argument("repo", help="Repo spec (name or name:path)")
+
     # check-refs
     sub.add_parser("check-refs", help="Verify cross-references for all claims")
 
@@ -426,6 +471,7 @@ def main():
 
     commands = {
         "init": cmd_init,
+        "add-repo": cmd_add_repo,
         "check-refs": cmd_check_refs,
         "check-stale": cmd_check_stale,
         "add": cmd_add,
