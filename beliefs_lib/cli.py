@@ -10,8 +10,8 @@ from .parser import (
     parse_registry, append_claim, update_claim_status,
     parse_nogoods, append_nogood,
 )
-from .check_refs import check_refs
-from .check_stale import check_stale
+from .check_refs import check_refs, resolve_path
+from .check_stale import check_stale, hash_file
 from .resolve import compute_entrenchment, resolve_conflict, classify_source
 from .nogoods_cmd import list_nogoods, filter_nogoods, detail_nogood
 from .compact import compact
@@ -57,12 +57,12 @@ def cmd_check_stale(args):
     already_stale = [c for c in claims if c.status == "STALE"]
     in_claims = [c for c in claims if c.status == "IN"]
     newly_stale_ids = set()
-    for claim_id, status, msg, entry_path in results:
+    for claim_id, status, msg, evidence_path in results:
         newly_stale_ids.add(claim_id)
         if not args.quiet:
             print(f"STALE {claim_id}")
             print(f"      {msg}")
-            print(f"      Entry: {entry_path}")
+            print(f"      Evidence: {evidence_path}")
             print()
 
     ok_count = len(in_claims) - len(newly_stale_ids)
@@ -85,10 +85,21 @@ def cmd_add(args):
             sys.exit(1)
 
     status = args.status or "IN"
+    source = args.source or ""
+    source_hash = ""
+    if source:
+        source_path = resolve_path(source, repos)
+        if source_path.exists():
+            try:
+                source_hash = hash_file(source_path)
+            except Exception:
+                pass
+
     claim = Claim(
         id=args.id,
         text=args.text,
-        source=args.source or "",
+        source=source,
+        source_hash=source_hash,
         date=args.date or date.today().isoformat(),
         status=status,
         type=args.type or "",
@@ -250,6 +261,49 @@ def cmd_update(args):
             print(f"  {k.replace('_', ' ').title()}: {v}")
 
 
+def cmd_hash_sources(args):
+    from .parser import serialize_registry
+
+    repos, claims = parse_registry(args.registry)
+    updated = 0
+    skipped = 0
+    missing = 0
+
+    for claim in claims:
+        if not claim.source:
+            skipped += 1
+            continue
+        if claim.source_hash and not args.force:
+            skipped += 1
+            continue
+
+        source_path = resolve_path(claim.source, repos)
+        if not source_path.exists():
+            missing += 1
+            if not args.quiet:
+                print(f"MISS  {claim.id} — source not found: {claim.source}")
+            continue
+
+        try:
+            new_hash = hash_file(source_path)
+        except Exception as e:
+            missing += 1
+            if not args.quiet:
+                print(f"ERR   {claim.id} — {e}")
+            continue
+
+        claim.source_hash = new_hash
+        updated += 1
+        if not args.quiet:
+            print(f"HASH  {claim.id} — {new_hash}")
+
+    if updated > 0:
+        args.registry.write_text(serialize_registry(repos, claims))
+
+    if not args.quiet:
+        print(f"\nSummary: {updated} hashed, {skipped} skipped, {missing} missing")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="beliefs",
@@ -320,6 +374,10 @@ def main():
     update_p.add_argument("--add-assumes", nargs="*", help="Add assumption labels")
     update_p.add_argument("--add-depends-on", nargs="*", help="Add dependency claim IDs")
 
+    # hash-sources
+    hash_p = sub.add_parser("hash-sources", help="Backfill source hashes for existing claims")
+    hash_p.add_argument("--force", action="store_true", help="Re-hash even if hash already exists")
+
     args = parser.parse_args()
 
     commands = {
@@ -332,5 +390,6 @@ def main():
         "list": cmd_list,
         "show": cmd_show,
         "update": cmd_update,
+        "hash-sources": cmd_hash_sources,
     }
     commands[args.command](args)

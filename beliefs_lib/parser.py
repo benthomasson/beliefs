@@ -49,6 +49,8 @@ def parse_registry(path: Path) -> tuple[dict[str, str], list[Claim]]:
                 val = mm.group(2).strip()
                 if key == "source":
                     claim.source = val
+                elif key == "source hash":
+                    claim.source_hash = val
                 elif key == "date":
                     claim.date = val
                 elif key == "assumes":
@@ -83,6 +85,8 @@ def serialize_claim(claim: Claim) -> str:
 
     if claim.source:
         lines.append(f"- Source: {claim.source}")
+    if claim.source_hash:
+        lines.append(f"- Source hash: {claim.source_hash}")
     if claim.date:
         lines.append(f"- Date: {claim.date}")
     if claim.assumes:

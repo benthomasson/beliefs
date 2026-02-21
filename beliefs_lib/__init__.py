@@ -11,6 +11,7 @@ class Claim:
     date: str = ""
     status: str = "IN"  # IN, OUT, STALE
     type: str = ""  # DERIVED, PREDICTED, MATCHED, INHERITED, AXIOM
+    source_hash: str = ""  # SHA-256 of source file content at claim creation
     assumes: list[str] = field(default_factory=list)
     depends_on: list[str] = field(default_factory=list)
     retracted_by: str = ""
