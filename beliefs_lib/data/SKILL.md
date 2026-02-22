@@ -1,7 +1,7 @@
 ---
 name: beliefs
 description: Manage the belief registry — track claims, detect staleness, resolve conflicts, query contradictions
-argument-hint: "[init|check-refs|check-stale|add|resolve|nogoods|compact|list|show|update|hash-sources|status] [args...]"
+argument-hint: "[init|check-refs|check-stale|add|resolve|nogoods|compact|list|show|update|hash-sources|install-skill|status] [args...]"
 allowed-tools: Bash(beliefs *), Bash(./beliefs *), Bash(uvx *beliefs*), Read, Grep, Glob
 ---
 

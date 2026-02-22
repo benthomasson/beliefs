@@ -119,7 +119,15 @@ The repo includes a [Claude Code](https://docs.anthropic.com/en/docs/claude-code
 
 The skill handles CLI discovery (installed binary → local script → uvx fallback) and interprets results — suggesting fixes for FAIL/WARN/STALE findings rather than just printing raw output.
 
-To use it, copy the `.claude/skills/beliefs/` directory into your project's `.claude/skills/` or install beliefs in a repo that already has Claude Code configured.
+To install the skill into any project:
+
+```bash
+# Install to .claude/skills/beliefs/SKILL.md (default)
+beliefs install-skill
+
+# Or specify a custom skills directory
+beliefs install-skill --skill-dir .claude/custom-skills
+```
 
 ## Origin
 
