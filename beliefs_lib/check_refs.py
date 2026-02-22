@@ -21,12 +21,21 @@ def extract_keywords(text: str) -> list[str]:
 def resolve_path(source: str, repos: dict[str, str]) -> Path:
     """Expand repo-prefixed source to absolute path.
 
-    E.g. 'physics/entries/2025/02/17/foo.md' -> ~/git/physics/entries/...
+    Supports both 'physics/entries/...' and 'physics:entries/...' formats.
     """
+    # Try colon separator first (physics:entries/...)
+    if ":" in source:
+        repo_name, rest = source.split(":", 1)
+        if repo_name in repos:
+            base = Path(repos[repo_name]).expanduser()
+            return base / rest
+
+    # Try slash separator (physics/entries/...)
     parts = source.split("/", 1)
     if len(parts) == 2 and parts[0] in repos:
         base = Path(repos[parts[0]]).expanduser()
         return base / parts[1]
+
     # Try as-is (relative to cwd or absolute)
     return Path(source).expanduser()
 
