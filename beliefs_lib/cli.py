@@ -239,6 +239,15 @@ def cmd_update(args):
     extra = {}
     if args.status:
         pass  # handled by update_claim_status directly
+    if args.source:
+        extra["source"] = args.source
+        # Hash the new source
+        source_path = resolve_path(args.source, repos)
+        if source_path.exists():
+            try:
+                extra["source_hash"] = hash_file(source_path)
+            except Exception:
+                pass
     if args.stale_reason:
         extra["stale_reason"] = args.stale_reason
     if args.superseded_by:
@@ -458,6 +467,7 @@ def main():
     update_p = sub.add_parser("update", help="Update an existing claim")
     update_p.add_argument("claim_id", help="Claim ID to update")
     update_p.add_argument("--status", choices=["IN", "OUT", "STALE"], help="New status")
+    update_p.add_argument("--source", help="Set or change source file path")
     update_p.add_argument("--stale-reason", help="Set stale reason")
     update_p.add_argument("--superseded-by", help="Set superseded-by claim ID")
     update_p.add_argument("--add-assumes", nargs="*", help="Add assumption labels")
