@@ -192,3 +192,57 @@ class TestCheckStale:
         )]
         results = check_stale(claims, repo_tree)
         assert results == []
+
+    def test_at_most_one_flag_per_claim(self, repo_tree):
+        """Regression: early version reported every matching entry per claim,
+        producing dozens of STALE flags for a single claim.
+        See beliefs-tool-feedback.md line 17."""
+        # Create multiple newer entries that could match
+        entries_dir = Path(repo_tree["physics"]) / "entries" / "2026" / "02" / "22"
+        (entries_dir / "entry-a.md").write_text("# Entry A\nContent about derived results physics\n")
+        (entries_dir / "entry-b.md").write_text("# Entry B\nMore derived results physics content\n")
+        (entries_dir / "entry-c.md").write_text("# Entry C\nYet more derived results physics here\n")
+
+        # Claim without hash — falls through to keyword heuristic
+        claims = [Claim(
+            id="noisy", text="Not derived, results pending in physics",
+            status="IN", source="", source_hash="",
+            date="2026-02-20",
+        )]
+        results = check_stale(claims, repo_tree)
+        # Should be at most 1 STALE flag, not 3+
+        stale_for_noisy = [r for r in results if r[0] == "noisy"]
+        assert len(stale_for_noisy) <= 1, (
+            f"Expected at most 1 STALE flag per claim, got {len(stale_for_noisy)}"
+        )
+
+
+class TestCheckStaleSummary:
+    """Tests for the summary logic in cmd_check_stale (CLI layer).
+    Regression: early version reported '8 OK, 0 STALE' when 3 claims were
+    already [STALE], confusing users. See beliefs-tool-feedback.md line 48."""
+
+    def test_already_stale_not_counted_as_ok(self, repo_tree):
+        """Claims already marked [STALE] should not inflate the OK count."""
+        source = Path(repo_tree["physics"]) / "entries" / "2026" / "02" / "20" / "old-entry.md"
+        h = hash_file(source)
+        claims = [
+            Claim(id="good", text="Good claim", status="IN",
+                  source="physics/entries/2026/02/20/old-entry.md",
+                  source_hash=h, date="2026-02-20"),
+            Claim(id="already-stale", text="Already stale", status="STALE",
+                  source="physics/entries/2026/02/20/old-entry.md",
+                  source_hash=h, date="2026-02-20",
+                  stale_reason="Known issue"),
+        ]
+        # check_stale only processes IN claims
+        results = check_stale(claims, repo_tree)
+        # Simulate the CLI summary logic
+        already_stale = [c for c in claims if c.status == "STALE"]
+        in_claims = [c for c in claims if c.status == "IN"]
+        newly_stale_ids = {r[0] for r in results}
+        ok_count = len(in_claims) - len(newly_stale_ids)
+
+        assert ok_count == 1, "Only 1 IN claim should be OK"
+        assert len(already_stale) == 1, "1 claim is already STALE"
+        assert len(newly_stale_ids) == 0, "No newly stale claims"

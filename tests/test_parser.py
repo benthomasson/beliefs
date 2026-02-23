@@ -439,3 +439,47 @@ class TestMarkdownEdgeCases:
         assert len(claims) == 2
         assert claims[0].id == "claim-a"
         assert claims[1].id == "claim-b"
+
+    def test_newline_in_header_does_not_capture_text_as_type(self, tmp_path):
+        """Regression: old regex used \\s+ which matched newlines, capturing
+        claim text as type. Fixed to [ \\t]+. See beliefs-tool-feedback.md line 16."""
+        md = (
+            "# Belief Registry\n<!-- -->\n\n"
+            "## Repos\n- test: ~/git/test\n\n"
+            "## Claims\n\n"
+            "### newline-bug [IN]\n"
+            "Claim text that is NOT a type\n"
+            "- Source: test.md\n"
+            "- Date: 2026-02-22\n"
+        )
+        p = tmp_path / "beliefs.md"
+        p.write_text(md)
+        repos, claims = parse_registry(p)
+        assert claims[0].type == "", "Claim text should not be captured as type"
+        assert claims[0].text == "Claim text that is NOT a type"
+
+    def test_type_only_from_same_line_as_header(self, tmp_path):
+        """Type should only come from the header line, not from subsequent lines."""
+        md = (
+            "# Belief Registry\n<!-- -->\n\n"
+            "## Repos\n- test: ~/git/test\n\n"
+            "## Claims\n\n"
+            "### typed-claim [IN] DERIVED\n"
+            "This is the claim text\n"
+            "- Date: 2026-02-22\n"
+        )
+        p = tmp_path / "beliefs.md"
+        p.write_text(md)
+        repos, claims = parse_registry(p)
+        assert claims[0].type == "DERIVED"
+        assert claims[0].text == "This is the claim text"
+
+    def test_update_with_no_extra_fields(self, tmp_registry):
+        """Regression: update_claim_status with empty extra dict should not
+        error (None iteration bug). See beliefs-tool-feedback.md line 107."""
+        update_claim_status(tmp_registry, "test-claim", "OUT")
+        repos, claims = parse_registry(tmp_registry)
+        assert claims[0].status == "OUT"
+        # All original metadata preserved
+        assert claims[0].source == "entries/2026/02/22/test.md"
+        assert claims[0].source_hash == "abc123def456"
