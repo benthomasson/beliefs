@@ -166,12 +166,24 @@ def update_claim_status(path: Path, claim_id: str, new_status: str, **extra) -> 
             while body_lines and not body_lines[-1].strip():
                 trailing.append(body_lines.pop())
 
-            result.extend(body_lines)
+            # Replace existing metadata lines if extra provides new values
+            extra_keys_used = set()
+            for line in body_lines:
+                mm = META_RE.match(line)
+                if mm:
+                    existing_key = mm.group(1).strip().lower().replace(" ", "_")
+                    if existing_key in extra:
+                        display_key = existing_key.replace("_", " ").title()
+                        result.append(f"- {display_key}: {extra[existing_key]}")
+                        extra_keys_used.add(existing_key)
+                        continue
+                result.append(line)
 
-            # Append extra metadata
+            # Append any extra metadata that didn't replace an existing line
             for key, val in extra.items():
-                display_key = key.replace("_", " ").title()
-                result.append(f"- {display_key}: {val}")
+                if key not in extra_keys_used:
+                    display_key = key.replace("_", " ").title()
+                    result.append(f"- {display_key}: {val}")
 
             # Restore trailing blank lines
             result.extend(trailing)
