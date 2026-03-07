@@ -7,7 +7,7 @@ from pathlib import Path
 
 from . import Claim, Nogood
 from .parser import (
-    parse_registry, append_claim, update_claim_status,
+    parse_registry, append_claim, serialize_claim, update_claim_status,
     parse_nogoods, append_nogood,
 )
 from .check_refs import check_refs, resolve_path
@@ -377,6 +377,94 @@ def cmd_init(args):
         print(f"Created {args.nogoods_file}")
 
 
+def cmd_add_batch(args):
+    """Add multiple claims from JSON lines on stdin. Parse registry once."""
+    import json
+
+    repos, claims = parse_registry(args.registry)
+    existing_ids = {c.id for c in claims}
+
+    input_text = sys.stdin.read().strip()
+    if not input_text:
+        print("No input on stdin. Provide JSON lines: {\"id\": ..., \"text\": ..., \"source\": ...}")
+        sys.exit(1)
+
+    new_claims = []
+    added = 0
+    skipped = 0
+    failed = 0
+
+    for line_num, line in enumerate(input_text.splitlines(), 1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError as e:
+            print(f"FAIL  line {line_num}: invalid JSON: {e}", file=sys.stderr)
+            failed += 1
+            continue
+
+        belief_id = data.get("id", "")
+        if not belief_id:
+            print(f"FAIL  line {line_num}: missing 'id'", file=sys.stderr)
+            failed += 1
+            continue
+
+        if belief_id in existing_ids:
+            if not args.quiet:
+                print(f"EXISTS {belief_id}")
+            skipped += 1
+            continue
+
+        # Check for duplicates within the batch
+        batch_ids = {c.id for c in new_claims}
+        if belief_id in batch_ids:
+            if not args.quiet:
+                print(f"DUP    {belief_id}")
+            skipped += 1
+            continue
+
+        source = data.get("source", "")
+        source_hash = ""
+        if source:
+            source_path = resolve_path(source, repos)
+            if source_path.exists():
+                try:
+                    source_hash = hash_file(source_path)
+                except Exception:
+                    pass
+
+        claim = Claim(
+            id=belief_id,
+            text=data.get("text", ""),
+            source=source,
+            source_hash=source_hash,
+            date=data.get("date", "") or date.today().isoformat(),
+            status=data.get("status", "IN"),
+            type=data.get("type", ""),
+            assumes=data.get("assumes", []),
+            depends_on=data.get("depends_on", []),
+            stale_reason=data.get("stale_reason", ""),
+        )
+        new_claims.append(claim)
+        added += 1
+
+    # Single file write for all new claims
+    if new_claims:
+        text = args.registry.read_text()
+        if not text.endswith("\n"):
+            text += "\n"
+        for claim in new_claims:
+            text += "\n" + serialize_claim(claim) + "\n"
+            if not args.quiet:
+                print(f"ADD    {claim.id}")
+        args.registry.write_text(text)
+
+    if not args.quiet:
+        print(f"\nBatch: {added} added, {skipped} skipped, {failed} failed")
+
+
 def cmd_install_skill(args):
     import shutil
     skill_source = Path(__file__).parent / "data" / "SKILL.md"
@@ -527,6 +615,9 @@ def main():
     update_p.add_argument("--add-assumes", nargs="*", help="Add assumption labels")
     update_p.add_argument("--add-depends-on", nargs="*", help="Add dependency claim IDs")
 
+    # add-batch
+    sub.add_parser("add-batch", help="Add multiple claims from JSON lines on stdin (parse once)")
+
     # hash-sources
     hash_p = sub.add_parser("hash-sources", help="Backfill source hashes for existing claims")
     hash_p.add_argument("--force", action="store_true", help="Re-hash even if hash already exists")
@@ -552,6 +643,7 @@ def main():
         "status": cmd_list,
         "show": cmd_show,
         "update": cmd_update,
+        "add-batch": cmd_add_batch,
         "hash-sources": cmd_hash_sources,
         "install-skill": cmd_install_skill,
     }
